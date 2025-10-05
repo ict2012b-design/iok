@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Asteroid Impact Simulator — 3D Globe</title>
+
+  <!-- Roboto font -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+  <!-- CesiumJS CSS -->
+  <link href="https://unpkg.com/cesium@latest/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+  <!-- SheetJS for Excel/CSV parsing -->
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0f1724;
+      --card: #0b1220;
+      --accent: #7c3aed;
+      --muted: #94a3b8;
+      --glass: rgba(255,255,255,0.03);
+      font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html, body, #cesiumContainer {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      height: 100vh;
+      display: flex;
+      background: linear-gradient(180deg, #071026 0%, #081426 60%);
+      color: #e6eef8;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow: hidden;
+    }
+    .app {
+      display: flex;
+      gap: 18px;
+      width: 100%;
+      padding: 18px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .left {
+      flex: 1;
+      min-width: 320px;
+      max-width: 860px;
+      height: calc(100vh - 36px);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(2,6,23,0.6);
+      position: relative;
+    }
+    #cesiumContainer {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    #cesiumContainer .cesium-viewer {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #cesiumContainer canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block !important;
+    }
+    .right {
+      width: 420px;
+      max-width: 40%;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+      height: calc(100vh - 36px);
+      -webkit-overflow-scrolling: touch;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 6px 20px rgba(2,6,23,0.6);
+      flex-shrink: 0;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-in-out;
+    }
+    .controls.visible {
+      max-height: none; /* Allow full expansion on all devices */
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap; /* Allow wrapping on small screens */
+    }
+    .label {
+      min-width: 88px;
+      font-size: 13px;
+      color: var(--muted);
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+    .value {
+      font-weight: 600;
+      min-width: 90px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    input[type=range], input[type=text] {
+      width: 100%;
+      max-width: 200px; /* Prevent overly wide sliders on mobile */
+      padding: 6px;
+      border-radius: 6px;
+      background: var(--glass);
+      color: inherit;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .outputs {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .output {
+      background: var(--glass);
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .output#surfaceType {
+      font-weight: 600;
+      color: #e6eef8;
+    }
+    .output strong {
+      width: 180px;
+      display: inline-block;
+    }
+    .buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap; /* Allow button wrapping */
+    }
+    button {
+      background: linear-gradient(180deg, var(--accent), #5b21b6);
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(92,33,182,0.18);
+      flex: 1;
+      min-width: 100px;
+    }
+    button.secondary {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: none;
+      color: var(--muted);
+    }
+    .toggle-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 8px;
+    }
+    .legend {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .legend .sw {
+      width: 18px;
+      height: 10px;
+      border-radius: 4px;
+    }
+    .sw.red {
+      background: linear-gradient(90deg, rgba(255,69,58,0.95), rgba(255,86,86,0.6));
+    }
+    .sw.orange {
+      background: linear-gradient(90deg, #ff8a00, #ffb86b);
+    }
+    .sw.yellow {
+      background: linear-gradient(90deg, #ffd54a, #fff59d);
+    }
+    .sw.mild {
+      background: linear-gradient(90deg, #c8f7a6, #e6ffcf);
+    }
+    @media (max-width: 920px) {
+      .app {
+        flex-direction: column;
+        padding: 10px;
+        gap: 10px;
+      }
+      .left {
+        max-width: none;
+        height: 60vh; /* Increased for better globe visibility on mobile */
+        min-height: 300px;
+      }
+      .right {
+        width: 100%;
+        max-width: none;
+        height: auto;
+        overflow-y: visible;
+        gap: 10px;
+      }
+      .card {
+        padding: 10px;
+      }
+      .output strong {
+        width: 140px;
+      }
+      .row {
+        gap: 8px;
+      }
+      .label {
+        min-width: 70px;
+      }
+      .value {
+        min-width: 60px;
+      }
+      input[type=range], input[type=text] {
+        max-width: 100%;
+      }
+      .buttons {
+        justify-content: space-between;
+      }
+      button {
+        flex: none;
+        min-width: auto;
+        padding: 8px 12px; /* Larger padding for touch */
+        font-size: 14px;
+      }
+      .toggle-btn {
+        display: none; /* Hide toggle on mobile since controls are always visible */
+      }
+    }
+    @media (max-width: 480px) {
+      .app {
+        padding: 8px;
+      }
+      .left {
+        height: 50vh; /* Adjusted for very small screens */
+      }
+      .output strong {
+        width: 100%;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .output {
+        padding: 8px;
+        font-size: 12px;
+      }
+      .legend {
+        justify-content: center;
+      }
+    }
+    .tooltip-content {
+      font-size: 13px;
+    }
+    .fall-wrap {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      z-index: 600;
+    }
+    .fall {
+      position: absolute;
+      font-size: 36px;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+    }
+    .muted-small {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #loadingOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      z-index: 1000;
+    }
+    #toolbar {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="left card">
+      <div id="cesiumContainer" class="fullSize"></div>
+      <div class="fall-wrap" id="fallWrap" aria-hidden="true"></div>
+      <div id="loadingOverlay">
+        <h1>Loading...</h1>
+      </div>
+      <div id="toolbar"></div>
+    </div>
+    <div class="right">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin: 6px 0 10px 0">
+          <h3 style="margin: 0">Asteroid Impact Simulator</h3>
+          <button id="toggleControls" class="toggle-btn">▼</button>
+        </div>
+        <div class="controls" id="controls">
+          <div class="row">
+            <div class="label">Cesium Ion Token</div>
+            <div style="flex:1"><input id="ionToken" type="text" placeholder="Enter Cesium Ion Token"></div>
+          </div>
+          <div class="row">
+            <div class="label">Mass (kg)</div>
+            <div style="flex:1"><input id="massRange" type="range" min="1e6" max="1e13" step="1" value="1e9"></div>
+            <div class="value" id="massVal">1,000,000,000</div>
+          </div>
+          <div class="row">
+            <div class="label">Speed (m/s)</div>
+            <div style="flex:1"><input id="speedRange" type="range" min="5000" max="50000" step="100" value="20000"></div>
+            <div class="value" id="speedVal">20,000</div>
+          </div>
+          <div class="row">
+            <div class="label">Angle (°)</div>
+            <div style="flex:1"><input id="angleRange" type="range" min="0" max="90" step="1" value="45"></div>
+            <div class="value" id="angleVal">45°</div>
+          </div>
+          <div class="row">
+            <div class="label">Density (kg/m³)</div>
+            <div style="flex:1"><input id="densityRange" type="range" min="1000" max="8000" step="100" value="3000"></div>
+            <div class="value" id="densityVal">3,000</div>
+          </div>
+          <div class="row">
+            <div class="label">Latitude</div>
+            <div style="flex:1"><input id="latRange" type="range" min="-90" max="90" step="0.0001" value="0"></div>
+            <div class="value" id="latVal">0.0000°</div>
+          </div>
+          <div class="row">
+            <div class="label">Longitude</div>
+            <div style="flex:1"><input id="lngRange" type="range" min="-180" max="180" step="0.0001" value="0"></div>
+            <div class="value" id="lngVal">0.0000°</div>
+          </div>
+          <div class="row">
+            <div class="label">Deflect (%)</div>
+            <div style="flex:1"><input id="deflectRange" type="range" min="0" max="90" step="1" value="0"></div>
+            <div class="value" id="deflectVal">0%</div>
+          </div>
+          <div class="row">
+            <div class="label">Fragment (%)</div>
+            <div style="flex:1"><input id="fragRange" type="range" min="0" max="90" step="1" value="0"></div>
+            <div class="value" id="fragVal">0%</div>
+          </div>
+          <div class="buttons" style="margin-top:6px">
+            <button id="simulateBtn">Simulate Impact</button>
+            <button id="resetBtn" class="secondary">Reset</button>
+            <button id="animateBtn" class="secondary">Animate Fall</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin:6px 0 10px 0">NASA NEO Integration</h3>
+        <button id="fetchNeoBtn">Fetch Upcoming NEOs</button>
+        <select id="neoSelect" style="width:100%; margin-top:10px; padding:6px; border-radius:6px; background:var(--glass); color:inherit; border:1px solid rgba(255,255,255,0.06);">
+          <option value="">Select NEO</option>
+        </select>
+        <div class="muted-small" style="margin-top:8px">Fetches near-Earth objects from NASA's API. Select one to auto-set mass, speed, and density based on real data (hypothetical impact).</div>
+      </div>
+      <div class="card outputs">
+        <div class="output"><strong>Asteroid diameter:</strong> <span id="astDia">—</span> m</div>
+        <div class="output"><strong>Kinetic energy:</strong> <span id="keVal">—</span> J (<span id="keSci">—</span>)</div>
+        <div class="output"><strong>Airburst altitude:</strong> <span id="airburstVal">—</span> km</div>
+        <div class="output"><strong>Crater diameter:</strong> <span id="craterVal">—</span> km</div>
+        <div class="output"><strong>Blast radii (Severe/Heavy/Mod/Mild):</strong> <span id="radiiVal">—</span> km</div>
+        <div class="output"><strong>Thermal radiation radius:</strong> <span id="thermalVal">—</span> km</div>
+        <div class="output"><strong>Seismic magnitude:</strong> <span id="seismicVal">—</span></div>
+        <div class="output"><strong>Affected population:</strong> <span id="popAffected">—</span></div>
+        <div class="output"><strong>Estimated fatalities:</strong> <span id="fatalitiesVal">—</span></div>
+        <div class="output" id="warningBox" style="display:none;background:linear-gradient(90deg,#3b0832, #6b1b43);color:#fff">⚠️ <span id="warningText"></span></div>
+        <div class="muted-small" id="popNote">Population estimated using country-average density. Click the globe to simulate and fetch local country data.</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <div class="legend">
+            <div class="sw red"></div><div style="font-size:13px;color:var(--muted);">Severe</div>
+            <div class="sw orange" style="margin-left:8px"></div><div style="font-size:13px;color:var(--muted);">Heavy</div>
+            <div class="sw yellow" style="margin-left:8px"></div><div style="font-size:13px;color:var(--muted);">Moderate</div>
+            <div class="sw mild" style="margin-left:8px"></div><div style="font-size:13px;color:var(--muted);">Mild</div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="text-align:center;font-size:13px;color:var(--muted)">
+        Tip: drag sliders — simulation updates instantly. Click/rotate/zoom the globe to explore.
+      </div>
+    </div>
+  </div>
+
+  <!-- CesiumJS with primary and fallback CDN -->
+  <script src="https://unpkg.com/cesium@latest/Build/Cesium/Cesium.js"></script>
+  <script>
+    // Fallback for CesiumJS if primary CDN fails
+    if (typeof Cesium === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/cesium@latest/Build/Cesium/Cesium.js"><\/script>');
+    }
+  </script>
+
+  <script>
+    // Excel/CSV handling
+    var gk_isXlsx = false;
+    var gk_xlsxFileLookup = {};
+    var gk_fileData = {};
+    function filledCell(cell) {
+      return cell !== '' && cell != null;
+    }
+    function loadFileData(filename) {
+      if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+        try {
+          var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+          var firstSheetName = workbook.SheetNames[0];
+          var worksheet = workbook.Sheets[firstSheetName];
+          var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+          var filteredData = jsonData.filter(row => row.some(filledCell));
+          var headerRowIndex = filteredData.findIndex((row, index) =>
+            row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+          );
+          if (headerRowIndex === -1 || headerRowIndex > 25) {
+            headerRowIndex = 0;
+          }
+          var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+          csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+          return csv;
+        } catch (e) {
+          console.error('Excel parsing error:', e);
+          return "";
+        }
+      }
+      return gk_fileData[filename] || "";
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (typeof Cesium === 'undefined') {
+        console.error('CesiumJS failed to load. Please check CDN links or network connection.');
+        const warnBox = document.getElementById('warningBox');
+        const warnText = document.getElementById('warningText');
+        warnBox.style.display = 'block';
+        warnText.textContent = 'Error: CesiumJS library failed to load. Please refresh the page or check your network.';
+        return;
+      }
+
+      // --- Toggle Controls with Dynamic Height ---
+      const toggleBtn = document.getElementById('toggleControls');
+      const controls = document.getElementById('controls');
+      function toggleControls() {
+        if (controls.classList.contains('visible')) {
+          controls.classList.remove('visible');
+          toggleBtn.textContent = '▶';
+        } else {
+          controls.classList.add('visible');
+          toggleBtn.textContent = '▼';
+        }
+      }
+      toggleBtn.addEventListener('click', toggleControls);
+
+      // Detect mobile and auto-show controls
+      if (window.innerWidth <= 920) {
+        controls.classList.add('visible');
+        toggleBtn.style.display = 'none'; // Hide toggle on mobile
+        controls.style.maxHeight = 'none'; // Full expansion on mobile
+      } else {
+        // Initialize as visible on desktop
+        controls.classList.add('visible');
+        toggleBtn.textContent = '▼';
+      }
+
+      // --- CesiumJS Setup ---
+      async function initializeViewer() {
+        const ionTokenInput = document.getElementById('ionToken');
+        const ionToken = ionTokenInput.value || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI4N2Y2YjhiYi02MWUxLTQyZmQtYmIzMi02NzNkYjA3YThlNjkiLCJpZCI6MzQ3MjcwLCJpYXQiOjE3NTk2NDU1ODB9.nDEZdiwUoZRrPHV49kvc1F-e1Fx4yrbr9Q_R7kuCY9U';
+        if (ionToken) {
+          Cesium.Ion.defaultAccessToken = ionToken;
+          console.log('Using Cesium Ion Token:', ionToken);
+        } else {
+          console.warn('No Cesium Ion token provided. 3D tileset will not be loaded.');
+          const warnBox = document.getElementById('warningBox');
+          const warnText = document.getElementById('warningText');
+          warnBox.style.display = 'block';
+          warnText.textContent = 'No Cesium Ion token provided. 3D buildings tileset will not be loaded.';
+        }
+
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+          baseLayerPicker: false,
+          geocoder: false,
+          homeButton: false,
+          sceneModePicker: false,
+          navigationHelpButton: false,
+          animation: false,
+          timeline: false,
+          fullscreenButton: false,
+          vrButton: false,
+          infoBox: false,
+          selectionIndicator: false,
+          sceneMode: Cesium.SceneMode.SCENE3D,
+          terrainProvider: await Cesium.CesiumTerrainProvider.fromIonAssetId(1, {
+            requestWaterMask: true,  // Enables water mask sampling
+            requestVertexNormals: true  // Optional: Improves lighting/shading
+          })
+        });
+        const scene = viewer.scene;
+        const globe = scene.globe;
+        globe.showWaterEffect = true;  // Optional: Visualizes water for debugging
+
+        // Explicitly set canvas size to match container
+        const container = viewer.container;
+        const canvas = viewer.scene.canvas;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+        viewer.resize();
+        viewer.scene.requestRender();
+
+        // Hide loading overlay
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        loadingOverlay.style.display = 'none';
+
+        // Constrain camera to prevent excessive zoom-out and ensure centering
+        viewer.scene.screenSpaceCameraController.maximumZoomDistance = 25000000;
+        viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1000;
+        viewer.scene.screenSpaceCameraController.enableTilt = false;
+
+        // Set initial view to center Earth, adjusted for device size
+        const initialZoomHeight = window.innerWidth <= 920 ? 10000000 : 20000000;
+        viewer.camera.setView({
+          destination: Cesium.Cartesian3.fromDegrees(0, 0, initialZoomHeight),
+          orientation: {
+            heading: Cesium.Math.toRadians(0),
+            pitch: Cesium.Math.toRadians(-90),
+            roll: 0
+          }
+        });
+
+        viewer.scene.globe.enableLighting = true;
+
+        // Load 3D tileset
+        if (ionToken) {
+          try {
+            console.log('Attempting to load 3D tileset (ID: 1)...');
+            const tileset = await viewer.scene.primitives.add(
+              await Cesium.Cesium3DTileset.fromIonAssetId(1)
+            );
+            tileset.maximumScreenSpaceError = 16;
+            console.log('3D tileset loaded successfully.');
+            viewer.resize();
+            viewer.scene.requestRender();
+          } catch (e) {
+            console.error('Failed to load 3D tileset:', e);
+            const warnBox = document.getElementById('warningBox');
+            const warnText = document.getElementById('warningText');
+            warnBox.style.display = 'block';
+            warnText.textContent = 'Failed to load 3D buildings tileset. Using base map only.';
+          }
+        }
+
+        // Dynamic canvas resize handler
+        function syncCanvasSize() {
+          const rect = container.getBoundingClientRect();
+          if (canvas.width !== rect.width || canvas.height !== rect.height) {
+            console.log(`Resizing canvas: ${canvas.width}x${canvas.height} -> ${rect.width}x${rect.height}`);
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            viewer.resize();
+            viewer.scene.requestRender();
+          }
+          requestAnimationFrame(syncCanvasSize);
+        }
+        requestAnimationFrame(syncCanvasSize);
+
+        // Handle zoom events to recenter
+        viewer.camera.moveEnd.addEventListener(() => {
+          const cartographic = viewer.camera.positionCartographic;
+          const height = cartographic.height;
+          if (height > 20000000) {
+            viewer.camera.setView({
+              destination: Cesium.Cartesian3.fromDegrees(0, 0, Math.min(height, 25000000)),
+              orientation: {
+                heading: Cesium.Math.toRadians(0),
+                pitch: Cesium.Math.toRadians(-90),
+                roll: 0
+              }
+            });
+            viewer.scene.requestRender();
+          }
+        });
+
+        return viewer;
+      }
+
+      const viewer = await initializeViewer();
+      const impactEntities = [];
+
+      // --- Surface Detection ---
+      async function detectSurfaceType(longitude, latitude, viewer) {
+        const scene = viewer.scene;
+        const globe = scene.globe;
+
+        // Step 1: Compute surface intersection via vertical raycast
+        const rayEndpoint = Cesium.Cartesian3.fromDegrees(longitude, latitude, 1000000.0); // 1,000km up
+        const rayOrigin = Cesium.Cartesian3.fromDegrees(longitude, latitude, -1000000.0); // Deep underground
+        const ray = new Cesium.Ray(rayEndpoint, new Cesium.Cartesian3(0, 0, -1)); // Downward direction
+
+        const intersection = await new Promise(resolve => {
+          scene.globe.tileLoadProgressEvent.addEventListener(() => {
+            const result = scene.pickFromRay(ray, { includeGroundSurface: true });
+            if (result && result.position) resolve(result);
+          }, { once: true });
+          scene.requestRender();
+        });
+
+        if (!intersection || !intersection.position) {
+          console.warn('No surface intersection found');
+          return false; // Fallback: Assume land for robustness
+        }
+
+        // Step 2: Sample water mask at intersection
+        const cartographic = Cesium.Cartographic.fromCartesian(intersection.position);
+        const tile = globe._surface._tilesToRender.find(t => t.data && t.data.isPointInTile(cartographic));
+        if (tile && tile.data && tile.data.waterMask) {
+          const waterMask = tile.data.waterMask;
+          const x = Math.floor(intersection.uv.x * waterMask.width);
+          const y = Math.floor(intersection.uv.y * waterMask.height);
+          const index = y * waterMask.width + x;
+          const value = waterMask[index]; // Uint8 value (0 = land, 255 = water)
+          return value > 127; // Threshold: >50% water = sea
+        }
+
+        // Fallback: Use elevation (negative = likely sea, but less reliable)
+        const surfaceHeight = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [
+          Cesium.Cartographic.fromDegrees(longitude, latitude)
+        ]);
+        return surfaceHeight[0].height < 0;
+      }
+
+      // --- Resize Handler ---
+      window.addEventListener('resize', () => {
+        const container = viewer.container;
+        const canvas = viewer.scene.canvas;
+        const rect = container.getBoundingClientRect();
+        if (canvas.width !== rect.width || canvas.height !== rect.height) {
+          console.log(`Window resize: Canvas ${canvas.width}x${canvas.height} -> Container ${rect.width}x${rect.height}`);
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+          viewer.resize();
+          viewer.scene.requestRender();
+        }
+        // Re-toggle controls on resize to adapt
+        if (window.innerWidth <= 920 && !controls.classList.contains('visible')) {
+          controls.classList.add('visible');
+        }
+      });
+
+      // --- Utilities ---
+      const $ = id => document.getElementById(id);
+      const fmt = (v) => Number(v).toLocaleString();
+      const fmtFixed = (v, n=2) => Number(v).toLocaleString(undefined, {maximumFractionDigits: n});
+      const fmtSci = (v) => {
+        if (!isFinite(v)) return '—';
+        const abs = Math.abs(v);
+        if (abs === 0) return '0';
+        if (abs < 1e3 || abs > 1e8) return v.toExponential(3);
+        return v.toLocaleString();
+      };
+
+      function debounce(fn, wait=120) {
+        let t;
+        return function(...args) {
+          clearTimeout(t);
+          t = setTimeout(() => fn.apply(this, args), wait);
+        };
+      }
+
+      // --- DOM Elements ---
+      const massR = $('massRange'), massV = $('massVal');
+      const speedR = $('speedRange'), speedV = $('speedVal');
+      const angleR = $('angleRange'), angleV = $('angleVal');
+      const densityR = $('densityRange'), densityV = $('densityVal');
+      const latR = $('latRange'), latV = $('latVal');
+      const lngR = $('lngRange'), lngV = $('lngVal');
+      const defR = $('deflectRange'), defV = $('deflectVal');
+      const fragR = $('fragRange'), fragV = $('fragVal');
+      const astDiaEl = $('astDia'), keValEl = $('keVal'), keSciEl = $('keSci');
+      const airburstEl = $('airburstVal'), craterEl = $('craterVal'), radiiEl = $('radiiVal');
+      const thermalEl = $('thermalVal'), seismicEl = $('seismicVal');
+      const popAffectedEl = $('popAffected'), fatalitiesEl = $('fatalitiesVal');
+      const warnBox = $('warningBox'), warnText = $('warningText');
+      const popNote = $('popNote');
+
+      function updateDisplays() {
+        massV.textContent = fmt(massR.value);
+        speedV.textContent = fmt(speedR.value);
+        angleV.textContent = fmt(angleR.value) + '°';
+        densityV.textContent = fmt(densityR.value);
+        latV.textContent = Number(latR.value).toFixed(4) + '°';
+        lngV.textContent = Number(lngR.value).toFixed(4) + '°';
+        defV.textContent = defR.value + '%';
+        fragV.textContent = fragR.value + '%';
+      }
+      [massR, speedR, angleR, densityR, latR, lngR, defR, fragR].forEach(el => el.addEventListener('input', updateDisplays));
+      updateDisplays();
+
+      // --- Physics ---
+      function computeAsteroidDiameter(massKg, density) {
+        const vol = massKg / density;
+        const radius = Math.cbrt((3 * vol) / (4 * Math.PI));
+        return 2 * radius;
+      }
+
+      function computeKE(massKg, speedMs) {
+        return 0.5 * massKg * speedMs * speedMs;
+      }
+
+      function estimateCraterDiameterKm(keJ, angleDeg) {
+        const angleFactor = Math.sin(angleDeg * Math.PI / 180);
+        const effectiveKE = keJ * angleFactor;
+        const C = 0.2;
+        const D_m = C * Math.pow(effectiveKE, 0.25);
+        return D_m / 1000;
+      }
+
+      function estimateAirburstAltitude(diameter_m, speedMs, angleDeg, density) {
+        const baseAltitude = 50;
+        const sizeFactor = Math.min(25 / diameter_m, 2);
+        const speedFactor = Math.min(12000 / speedMs, 1.5);
+        const angleFactor = angleDeg / 90;
+        const densityFactor = Math.min(2000 / density, 1.5);
+        const altitude = baseAltitude * (0.5 * sizeFactor + 0.3 * speedFactor + 0.1 * angleFactor + 0.1 * densityFactor);
+        return Math.min(Math.max(altitude, 10), 100);
+      }
+
+      function estimateThermalRadiusKm(keJ) {
+        const C_thermal = 0.05;
+        const R_m = C_thermal * Math.pow(keJ, 1/3);
+        return R_m / 1000;
+      }
+
+      function estimateSeismicMagnitude(keJ) {
+        const logE = Math.log10(keJ);
+        const M = (logE - 4.8) / 1.5;
+        return Math.max(0, Math.min(M, 12));
+      }
+
+      function checkAtmosphericDisintegration(diameter_m, speedMs, angleDeg, density) {
+        return (
+          diameter_m < 25 &&
+          (angleDeg > 60 || speedMs < 12000 || density < 2000)
+        );
+      }
+
+      function computeImpact(massKg, speedMs, angleDeg, density, deflectPct, fragPct) {
+        const effectiveSpeed = speedMs * (1 - deflectPct / 100);
+        const effectiveMass = massKg * (1 - fragPct / 100);
+        const diameter_m = computeAsteroidDiameter(effectiveMass, density);
+        const ke = computeKE(effectiveMass, effectiveSpeed);
+        const disintegrates = checkAtmosphericDisintegration(diameter_m, effectiveSpeed, angleDeg, density);
+
+        if (disintegrates) {
+          const airburst_km = estimateAirburstAltitude(diameter_m, effectiveSpeed, angleDeg, density);
+          return {
+            diameter_m, ke, airburst_km, crater_km: 0, severe_km: 0, heavy_km: 0,
+            moderate_km: 0, mild_km: 0, thermal_km: 0, seismic_mag: 0, disintegrates: true
+          };
+        }
+
+        const crater_km = estimateCraterDiameterKm(ke, angleDeg);
+        const severe_km = Math.max(0.5, crater_km * 0.6);
+        const heavy_km = Math.max(severe_km * 1.8, crater_km * 2.0);
+        const moderate_km = Math.max(heavy_km * 1.9, crater_km * 5.0);
+        const mild_km = Math.max(moderate_km * 2.2, crater_km * 12.0);
+        const thermal_km = estimateThermalRadiusKm(ke);
+        const seismic_mag = estimateSeismicMagnitude(ke);
+
+        return {
+          diameter_m, ke, airburst_km: 0, crater_km, severe_km, heavy_km,
+          moderate_km, mild_km, thermal_km, seismic_mag, disintegrates: false
+        };
+      }
+
+      // --- Population Estimation ---
+      async function reverseGeocodeCountry(lat, lng) {
+        try {
+          const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=3&addressdetails=1`;
+          const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+          if (!res.ok) throw new Error('reverse geocode failed');
+          const data = await res.json();
+          const countryCode = data && data.address && data.address.country_code ? data.address.country_code.toUpperCase() : null;
+          return countryCode;
+        } catch (e) {
+          console.warn('reverse geocode error', e);
+          return null;
+        }
+      }
+
+      async function fetchCountryDensity(alpha2) {
+        try {
+          const url = `https://restcountries.com/v3.1/alpha/${alpha2}`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('country fetch failed');
+          const data = await res.json();
+          const info = Array.isArray(data) ? data[0] : data;
+          if (!info || !info.population || !info.area) return null;
+          const density = info.population / info.area;
+          return { density, population: info.population, area: info.area, name: info.name && info.name.common };
+        } catch (e) {
+          console.warn('country fetch error', e);
+          return null;
+        }
+      }
+
+      function ringAreas(severe_km, heavy_km, moderate_km, mild_km) {
+        const area = (r) => Math.PI * r * r;
+        const A_severe = area(severe_km);
+        const A_heavy = Math.max(0, area(heavy_km) - A_severe);
+        const A_moderate = Math.max(0, area(moderate_km) - area(heavy_km));
+        const A_mild = Math.max(0, area(mild_km) - area(moderate_km));
+        return { A_severe, A_heavy, A_moderate, A_mild };
+      }
+
+      async function estimatePopulationImpact(lat, lng, result) {
+        if (result.disintegrates) {
+          return { densityData: null, density: 0, perZone: {}, totalAffected: 0, totalFatal: 0 };
+        }
+        const fallbackDensity = 60;
+        const countryCode = await reverseGeocodeCountry(lat, lng);
+        let densityData = null;
+        if (countryCode) {
+          densityData = await fetchCountryDensity(countryCode).catch(() => null);
+        }
+        const density = densityData && densityData.density ? densityData.density : fallbackDensity;
+        const areas = ringAreas(result.severe_km, result.heavy_km, result.moderate_km, result.mild_km);
+        const pop_severe = areas.A_severe * density;
+        const pop_heavy = areas.A_heavy * density;
+        const pop_moderate = areas.A_moderate * density;
+        const pop_mild = areas.A_mild * density;
+        const totalAffected = pop_severe + pop_heavy + pop_moderate + pop_mild;
+        const fatal_severe = pop_severe * 0.9;
+        const fatal_heavy = pop_heavy * 0.5;
+        const fatal_moderate = pop_moderate * 0.15;
+        const fatal_mild = pop_mild * 0.02;
+        const totalFatal = fatal_severe + fatal_heavy + fatal_moderate + fatal_mild;
+        return {
+          densityData,
+          density,
+          perZone: {
+            severe: { area_km2: areas.A_severe, pop: pop_severe, fatal: fatal_severe },
+            heavy: { area_km2: A_heavy, pop: pop_heavy, fatal: fatal_heavy },
+            moderate: { area_km2: areas.A_moderate, pop: pop_moderate, fatal: fatal_moderate },
+            mild: { area_km2: areas.A_mild, pop: pop_mild, fatal: fatal_mild }
+          },
+          totalAffected, totalFatal
+        };
+      }
+
+      // --- Interaction: Draw on Globe ---
+      function clearImpact() {
+        impactEntities.forEach(entity => viewer.entities.remove(entity));
+        impactEntities.length = 0;
+        warnBox.style.display = 'none';
+        astDiaEl.textContent = '—';
+        keValEl.textContent = '—';
+        keSciEl.textContent = '—';
+        airburstEl.textContent = '—';
+        craterEl.textContent = '—';
+        radiiEl.textContent = '—';
+        thermalEl.textContent = '—';
+        seismicEl.textContent = '—';
+        popAffectedEl.textContent = '—';
+        fatalitiesEl.textContent = '—';
+        const surfaceOutput = document.getElementById('surfaceType');
+        if (surfaceOutput) surfaceOutput.remove();
+        popNote.textContent = 'Population estimated using country-average density. Click the globe to simulate and fetch local country data.';
+        viewer.scene.requestRender();
+      }
+
+      function createEllipse(lng, lat, radius_km, color, opacity, label) {
+        const radius_m = radius_km * 1000;
+        const entity = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(lng, lat),
+          ellipse: {
+            semiMajorAxis: radius_m,
+            semiMinorAxis: radius_m,
+            material: Cesium.Color.fromCssColorString(color).withAlpha(opacity),
+            outline: false
+          },
+          label: {
+            text: `${label}: ${fmtFixed(radius_km, 2)} km`,
+            font: '13px Roboto, sans-serif',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -20),
+            show: false
+          }
+        });
+        return entity;
+      }
+
+      async function drawImpact(lat, lng, result) {
+        clearImpact();
+        if (result.disintegrates) {
+          warnBox.style.display = 'block';
+          warnText.textContent = `Meteor disintegrates in atmosphere at ~${fmtFixed(result.airburst_km, 1)} km altitude — no ground impact.`;
+          astDiaEl.textContent = fmtFixed(result.diameter_m, 1);
+          keValEl.textContent = fmt(parseFloat(result.ke.toFixed(0)));
+          keSciEl.textContent = fmtSci(result.ke);
+          airburstEl.textContent = fmtFixed(result.airburst_km, 1);
+          craterEl.textContent = '0';
+          radiiEl.textContent = '0 / 0 / 0 / 0';
+          thermalEl.textContent = '0';
+          seismicEl.textContent = '0';
+          popAffectedEl.textContent = '0';
+          fatalitiesEl.textContent = '0';
+          popNote.textContent = 'No population affected due to atmospheric disintegration.';
+          viewer.scene.requestRender();
+          return;
+        }
+
+        const marker = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(lng, lat, 1000),
+          point: {
+            pixelSize: 10,
+            color: Cesium.Color.RED,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2
+          }
+        });
+        impactEntities.push(marker);
+
+        const mildEllipse = createEllipse(lng, lat, result.mild_km, '#c8f7a6', 0.12, 'Mild');
+        const moderateEllipse = createEllipse(lng, lat, result.moderate_km, '#ffd54a', 0.18, 'Moderate');
+        const heavyEllipse = createEllipse(lng, lat, result.heavy_km, '#ff8a1f', 0.25, 'Heavy');
+        const severeEllipse = createEllipse(lng, lat, result.severe_km, '#ff4444', 0.35, 'Severe');
+        impactEntities.push(mildEllipse, moderateEllipse, heavyEllipse, severeEllipse);
+
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lng, lat, 10000),
+          orientation: {
+            heading: Cesium.Math.toRadians(0),
+            pitch: Cesium.Math.toRadians(-45),
+            roll: 0
+          },
+          duration: 1,
+          complete: () => {
+            viewer.scene.requestRender();
+          }
+        });
+      }
+
+      // --- Raycasting for Clicking Globe ---
+      const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+      handler.setInputAction((click) => {
+        const cartesian = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+        if (cartesian) {
+          const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+          const lng = Cesium.Math.toDegrees(cartographic.longitude);
+          const lat = Cesium.Math.toDegrees(cartographic.latitude);
+          latR.value = Math.max(-90, Math.min(90, lat));
+          lngR.value = Math.max(-180, Math.min(180, lng));
+          updateDisplays();
+          simulate(true);
+        }
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+      // --- Tooltip Handling ---
+      let tooltipDiv = null;
+      function showTooltip(event, content) {
+        if (!tooltipDiv) {
+          tooltipDiv = document.createElement('div');
+          tooltipDiv.style.position = 'absolute';
+          tooltipDiv.style.background = 'rgba(0,0,0,0.8)';
+          tooltipDiv.style.color = '#fff';
+          tooltipDiv.style.padding = '5px 10px';
+          tooltipDiv.style.borderRadius = '5px';
+          tooltipDiv.style.pointerEvents = 'none';
+          tooltipDiv.style.zIndex = '1000';
+          document.body.appendChild(tooltipDiv);
+        }
+        tooltipDiv.innerHTML = content;
+        tooltipDiv.style.left = `${event.position.x + 10}px`;
+        tooltipDiv.style.top = `${event.position.y + 10}px`;
+        tooltipDiv.style.display = 'block';
+      }
+
+      function hideTooltip() {
+        if (tooltipDiv) {
+          tooltipDiv.style.display = 'none';
+        }
+      }
+
+      handler.setInputAction((movement) => {
+        const picked = viewer.scene.pick(movement.endPosition);
+        if (picked && picked.id && picked.id.label) {
+          showTooltip(movement, picked.id.label.text);
+        } else {
+          hideTooltip();
+        }
+      }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+      // --- Animation: Falling Emoji ---
+      const fallWrap = $('fallWrap');
+      function animateFallTo(lat, lng, done) {
+        const screenPos = Cesium.SceneTransforms.wgs84ToWindowCoordinates(
+          viewer.scene,
+          Cesium.Cartesian3.fromDegrees(lng, lat)
+        );
+        if (!screenPos) {
+          done && done();
+          return;
+        }
+
+        const el = document.createElement('div');
+        el.className = 'fall';
+        el.innerHTML = '☄️';
+        el.style.left = `${screenPos.x}px`;
+        el.style.top = '-120px';
+        el.style.opacity = '1';
+        el.style.transition = 'top 900ms cubic-bezier(.2,.9,.2,1), opacity 200ms linear';
+        fallWrap.appendChild(el);
+
+        void el.offsetWidth;
+        const clampY = Math.min(Math.max(screenPos.y, 20), fallWrap.clientHeight - 20);
+        el.style.top = `${clampY}px`;
+
+        const onEnd = (ev) => {
+          if (ev.propertyName === 'top') {
+            el.removeEventListener('transitionend', onEnd);
+            el.style.transition = 'opacity 300ms linear';
+            el.style.opacity = '0';
+            setTimeout(() => {
+              el.remove();
+              done && done();
+            }, 320);
+          }
+        };
+        el.addEventListener('transitionend', onEnd);
+
+        setTimeout(() => {
+          if (document.body.contains(el)) {
+            el.remove();
+            done && done();
+          }
+        }, 1600);
+      }
+
+      // --- Simulation ---
+      const debouncedSimulate = debounce((animate = false) => simulate(animate), 80);
+
+      async function simulate(animate = false) {
+        try {
+          const mass = Number(massR.value);
+          const speed = Number(speedR.value);
+          const angle = Number(angleR.value);
+          const density = Number(densityR.value);
+          const lat = Number(latR.value);
+          const lng = Number(lngR.value);
+          const def = Number(defR.value);
+          const frag = Number(fragR.value);
+
+          // Detect surface type (land or sea)
+          const isSea = await detectSurfaceType(lng, lat, viewer);
+          const surfaceType = isSea ? 'sea' : 'land';
+          console.log(`Impact surface: ${surfaceType}`);
+
+          // Compute impact parameters
+          const res = computeImpact(mass, speed, angle, density, def, frag);
+
+          // Adjust for sea impacts (no crater unless massive, no direct population)
+          if (isSea && !res.disintegrates) {
+            res.crater_km = 0; // No crater for sea impacts (simplification)
+            res.severe_km = 0;
+            res.heavy_km = 0;
+            res.moderate_km = 0;
+            res.mild_km = 0;
+            res.seismic_mag = 0; // No seismic effect on water
+            warnBox.style.display = 'block';
+            warnText.textContent = `Impact over sea — no crater formed. Tsunami effects not modeled.`;
+          }
+
+          // Update UI displays
+          astDiaEl.textContent = fmtFixed(res.diameter_m, 1);
+          keValEl.textContent = fmt(parseFloat(res.ke.toFixed(0)));
+          keSciEl.textContent = fmtSci(res.ke);
+          airburstEl.textContent = res.disintegrates ? fmtFixed(res.airburst_km, 1) : '0';
+          craterEl.textContent = res.disintegrates || isSea ? '0' : fmtFixed(res.crater_km, 2);
+          radiiEl.textContent = res.disintegrates || isSea ? '0 / 0 / 0 / 0' : `${fmtFixed(res.severe_km, 2)} / ${fmtFixed(res.heavy_km, 2)} / ${fmtFixed(res.moderate_km, 2)} / ${fmtFixed(res.mild_km, 2)}`;
+          thermalEl.textContent = res.disintegrates || isSea ? '0' : fmtFixed(res.thermal_km, 2);
+          seismicEl.textContent = res.disintegrates || isSea ? '0' : fmtFixed(res.seismic_mag, 1);
+
+          const megatons = res.ke / 4.184e15;
+          if (res.disintegrates) {
+            warnBox.style.display = 'block';
+            warnText.textContent = `Meteor disintegrates in atmosphere at ~${fmtFixed(res.airburst_km, 1)} km altitude — no ground impact.`;
+          } else if (isSea) {
+            warnBox.style.display = 'block';
+            warnText.textContent = `Impact over sea — no crater formed. Tsunami effects not modeled.`;
+          } else if (megatons > 1000) {
+            warnBox.style.display = 'block';
+            warnText.textContent = `Extreme energy: ~${Math.round(megatons).toLocaleString()} megatons — global catastrophic potential on land.`;
+          } else if (megatons > 10) {
+            warnBox.style.display = 'block';
+            warnText.textContent = `Large impact: ~${Math.round(megatons).toLocaleString()} megatons — regional devastation on land.`;
+          } else {
+            warnBox.style.display = 'none';
+          }
+
+          // Estimate population impact (no population for sea impacts)
+          if (isSea) {
+            popAffectedEl.textContent = '0';
+            fatalitiesEl.textContent = '0';
+            popNote.textContent = 'No population affected — impact over sea.';
+          } else {
+            popNote.textContent = 'Estimating population — fetching country data...';
+            try {
+              const popEst = await estimatePopulationImpact(lat, lng, res);
+              const totalAff = Math.round(popEst.totalAffected);
+              const totalFatal = Math.round(popEst.totalFatal);
+              popAffectedEl.textContent = totalAff.toLocaleString();
+              fatalitiesEl.textContent = totalFatal.toLocaleString();
+              if (popEst.densityData && popEst.densityData.name) {
+                popNote.textContent = `Using country-average density for ${popEst.densityData.name} (${Math.round(popEst.densityData.density)} ppl/km²). This is a coarse estimate.`;
+              } else {
+                popNote.textContent = `Using fallback global-average density (${Math.round(popEst.density)} ppl/km²). For more accuracy, connect a gridded population dataset.`;
+              }
+              if (totalAff < 1) popAffectedEl.textContent = '<1';
+              if (totalFatal < 1) fatalitiesEl.textContent = '<1';
+            } catch (e) {
+              popNote.textContent = 'Population estimation failed — showing no estimate.';
+              console.warn('Population estimation error:', e);
+            }
+          }
+
+          // Add surface type to output
+          const outputCard = document.querySelector('.card.outputs');
+          let surfaceOutput = document.getElementById('surfaceType');
+          if (!surfaceOutput) {
+            surfaceOutput = document.createElement('div');
+            surfaceOutput.id = 'surfaceType';
+            surfaceOutput.className = 'output';
+            outputCard.insertBefore(surfaceOutput, popAffectedEl.parentElement);
+          }
+          surfaceOutput.innerHTML = `<strong>Surface type:</strong> ${surfaceType.charAt(0).toUpperCase() + surfaceType.slice(1)}`;
+
+          if (animate) {
+            animateFallTo(lat, lng, () => drawImpact(lat, lng, res));
+          } else {
+            drawImpact(lat, lng, res);
+          }
+        } catch (e) {
+          console.error('Simulation error:', e);
+          warnBox.style.display = 'block';
+          warnText.textContent = 'Error during simulation — please check input values or terrain data.';
+        }
+      }
+
+      // --- NASA NEO API Integration ---
+      const apiKey = '4gkxMlrvfAdWiMnr4vCVL7zwizhtX77QCPALiQrd';
+
+      async function fetchNEOs() {
+        const today = new Date().toISOString().split('T')[0];
+        const url = `https://api.nasa.gov/neo/rest/v1/feed?start_date=${today}&api_key=${apiKey}`;
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('NEO API fetch failed');
+          const data = await res.json();
+          const neos = [];
+          for (let date in data.near_earth_objects) {
+            data.near_earth_objects[date].forEach(neo => {
+              if (neo.estimated_diameter && neo.close_approach_data && neo.close_approach_data[0]) {
+                neos.push(neo);
+              }
+            });
+          }
+          const sel = $('neoSelect');
+          sel.innerHTML = '<option value="">Select NEO</option>';
+          neos.forEach(neo => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({
+              name: neo.name,
+              dia_min: neo.estimated_diameter.meters.estimated_diameter_min,
+              dia_max: neo.estimated_diameter.meters.estimated_diameter_max,
+              vel: neo.close_approach_data[0].relative_velocity.kilometers_per_second,
+              density: 3000
+            });
+            opt.textContent = `${neo.name} (Close Approach: ${neo.close_approach_data[0].close_approach_date})`;
+            sel.appendChild(opt);
+          });
+          if (neos.length === 0) {
+            sel.innerHTML += '<option value="">No NEOs found in the next week</option>';
+          }
+        } catch (e) {
+          console.error('NEO fetch error:', e);
+          $('neoSelect').innerHTML = '<option value="">Error fetching NEOs</option>';
+        }
+      }
+
+      // --- Events ---
+      $('simulateBtn').addEventListener('click', () => simulate(false));
+      $('resetBtn').addEventListener('click', () => clearImpact());
+      $('animateBtn').addEventListener('click', () => simulate(true));
+      [massR, speedR, angleR, densityR, latR, lngR, defR, fragR].forEach(el => el.addEventListener('input', () => debouncedSimulate(false)));
+      simulate(false);
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') simulate(false);
+        if (e.key === 'r') clearImpact();
+      });
+
+      $('fetchNeoBtn').addEventListener('click', fetchNEOs);
+      $('neoSelect').addEventListener('change', (e) => {
+        if (!e.target.value) return;
+        const d = JSON.parse(e.target.value);
+        const avg_dia = (d.dia_min + d.dia_max) / 2;
+        const radius = avg_dia / 2;
+        const volume = (4 / 3) * Math.PI * Math.pow(radius, 3);
+        const mass = d.density * volume;
+        const clamped_mass = Math.min(Math.max(mass, 1e6), 1e13);
+        setRangeValue(massR, clamped_mass);
+        const speed = d.vel * 1000;
+        const clamped_speed = Math.min(Math.max(speed, 5000), 50000);
+        setRangeValue(speedR, clamped_speed);
+        setRangeValue(densityR, d.density);
+        setRangeValue(angleR, 45);
+        setRangeValue(defR, 0);
+        setRangeValue(fragR, 0);
+        simulate(false);
+      });
+
+      function setRangeValue(range, v) {
+        range.value = v;
+        updateDisplays();
+        debouncedSimulate(false);
+      }
+
+      // Update tileset on token change
+      document.getElementById('ionToken').addEventListener('change', async () => {
+        await initializeViewer();
+        simulate(false);
+      });
+    });
+  </script>
+</body>
+</html>
